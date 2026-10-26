@@ -1,0 +1,14 @@
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+results/
+*.wav
+*.avi
+*.mp4
+*.stl
+*.step
+*.stp
+*.png
+devices.json
+tape_dispense.gcode
