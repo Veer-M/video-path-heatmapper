@@ -1,25 +1,70 @@
 # Video path heatmapper
 
-Track colored markers in a top-down video and see where they spend time. Each object gets an ID, a movement trail, and basic movement statistics. The program runs locally and does not need a model download or GPU.
+This program follows colored objects in a top-down video and shows where they move. Each object gets an ID and its own trail. It also measures distance and speed and makes a heatmap that shows where the objects spend time. Everything runs on your computer without a downloaded AI model or GPU.
 
-![Two marker trajectories and their occupancy heatmap](examples/demo.png)
+![Two objects with separate trails and a heatmap of where they spend time](examples/demo.png)
 
-## Try the example
+## How it follows an object
 
-Use Python 3.11 or newer. From this folder:
+The program changes each frame into HSV color space. HSV separates color from brightness, which makes it easier to find red, green, or blue markers. It removes small bits of noise, then groups connected pixels into shapes. The center of each shape is called its centroid. That is the point the program follows.
+
+To keep the same ID between frames, it predicts where an object will move using its last two positions. It matches nearby detections to those predictions. Each detection can match only one track in a frame. If a marker disappears briefly, the program keeps its track available for a set number of missing frames.
+
+This method works best with clear markers and a fixed camera. Objects can swap IDs if they cross or overlap. Changes in lighting, video compression, camera movement, and background objects with the same color can also affect tracking.
+
+## The sample video
+
+The included sample has two red markers moving along different paths. One disappears for six frames, and a tiny red dot acts as background noise. The program finds two tracks and 354 detections across 180 frames. With `--annotated`, it also saves a video that shows the boxes, IDs, and trails.
+
+## Files you get
+
+| File | What it shows |
+| --- | --- |
+| `heat_path.png` | White dots at all detected positions |
+| `tracks.png` | A separate colored trail for each ID |
+| `heat_density.png` | A heatmap of where objects spend time |
+| `overlay.png` | The heatmap placed over the first frame |
+| `positions.csv` | Frame number, time, ID, position, and object area |
+| `occupancy_seconds.npy` | The unsmoothed time totals for each pixel |
+| `summary.json` | Settings, detection counts, and movement measurements |
+| `annotated.avi` | A video with IDs and trails when you use `--annotated` |
+
+The heatmap adds time at the center of each detected object, not across its whole shape. Each detected frame adds `1 / fps` seconds to that pixel. The picture is smoothed and scaled separately for each run. Use the numerical occupancy files if you want to compare time totals between videos.
+
+Distance is the sum of straight lines between an object's recorded positions. Mean speed is that distance divided by the time from the first position to the last, including gaps. Missing positions are not filled in. `observed_seconds` counts frames where the object was found. `span_seconds` is the time between its first and last recorded positions. Speed is in pixels per second unless you add your own conversion to real-world distance.
+
+## Try it
+
+Use Python 3.11 or newer. Open a terminal in this project's folder and create a virtual environment. This keeps its packages separate from your other Python projects.
 
 ```sh
 python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS / Linux: source .venv/bin/activate
+```
+
+On Windows, activate it with this command.
+
+```sh
+.venv\Scripts\activate
+```
+
+On macOS or Linux, use this command instead.
+
+```sh
+source .venv/bin/activate
+```
+
+Then install the packages the project needs.
+
+```sh
 python -m pip install -r requirements.txt
+```
+
+```sh
 python sample_video.py
 python heatmapper.py gameplay.avi --min-area 30 --annotated
 ```
 
-The sample contains two red markers, a six-frame disappearance, and a small red noise dot. It produces two tracks and 354 detections across 180 frames. Open `results/annotated.avi` to watch the IDs and trails.
-
-## Use your own footage
+Open `results/annotated.avi` to watch the sample result. To use your own footage, pass its file name instead.
 
 ```sh
 python heatmapper.py gameplay.mp4 --color red --min-area 30 --max-area 500
@@ -27,41 +72,13 @@ python heatmapper.py gameplay.mp4 --roi 50 20 640 480 --max-distance 15 --max-ga
 python heatmapper.py gameplay.mp4 --max-frames 300 --output short-run
 ```
 
-`--roi X Y WIDTH HEIGHT` limits detection to a rectangle, using full-frame coordinates. It must fit inside the video. `--color` accepts red, green, or blue. Use `--fps 30` if the video metadata has no usable frame rate. An override also changes timestamps and speed calculations.
+`--min-area` and `--max-area` filter shapes by their pixel area. `--roi X Y WIDTH HEIGHT` limits the search to a rectangle inside the frame. Positions in the output still use the full frame's coordinates.
 
-## What gets saved
+`--max-distance` controls how far a detection can be from its predicted position per elapsed frame. The allowed distance grows after missing frames. Lower it if nearby objects swap IDs. Raise it if fast objects keep getting new IDs. `--max-gap` controls how many missing frames a track can survive.
 
-| File | Contents |
-| --- | --- |
-| `heat_path.png` | White dots at every detected centroid |
-| `tracks.png` | Separate colored trails for the tracked IDs |
-| `heat_density.png` | Smoothed, normalized occupancy heatmap |
-| `overlay.png` | Heatmap over the first video frame |
-| `positions.csv` | Frame, time, ID, X, Y, and component area for every detection |
-| `occupancy_seconds.npy` | Unsmoothed floating-point occupancy in seconds per pixel |
-| `summary.json` | Configuration, detection coverage, and per-track statistics |
-| `annotated.avi` | Video with boxes, IDs, and trails when `--annotated` is used |
+The program normally reads the frame rate from the video. Use `--fps 30` if that information is missing or wrong. This changes the timestamps and speed calculations too. Processing stops when the video ends or the decoder cannot read another frame. The report covers only the frames that were read.
 
-The heatmap image is normalized separately for each run. Compare the numerical occupancy arrays when you need consistent units across videos. Occupancy increases at an object's centroid by `1 / fps` for each observed frame; it does not measure the object's full footprint.
-
-## How tracking works
-
-1. Threshold the frame in HSV. Red includes both ends of the hue range.
-2. Remove isolated pixels with a small morphological opening and find connected components.
-3. Filter components by area and the optional region of interest.
-4. Predict each active track's next position from its previous two observations.
-5. Greedily match the closest eligible track/detection pairs. Each detection and track can be used once per frame.
-6. Keep an unmatched track available for up to `max-gap` missing frames. Start a new ID when no active track matches.
-
-`max-distance` is the allowed deviation from the prediction in pixels per elapsed frame. After a gap, the gate grows with the number of elapsed frames. Reduce it when nearby markers incorrectly swap IDs; increase it when rapid motion creates fragmented tracks.
-
-Distance is the sum of straight segments between observations. Mean speed divides that distance by the time between the first and last observations, including gaps. No position is invented for missing frames. `observed_seconds` counts only detected frames; `span_seconds` measures the first-to-last timestamp span.
-
-This is color-based tracking, not player recognition. Overlapping objects can merge into one blob, and IDs can switch at crossings or after long disappearances. Camera motion, lighting changes, compression, and same-color scenery affect results. Pixel speeds are not physical speeds without spatial calibration. Video decoding stops at EOF or a decoder failure; the summary describes the frames actually read.
-
-## Project layout
-
-`tracking.py` contains detection, association, and statistics. `heatmapper.py` handles video input and output files. `sample_video.py` generates a repeatable two-marker example.
+`tracking.py` handles detection, IDs, and measurements. `heatmapper.py` reads the video and saves the results. `sample_video.py` makes the sample footage.
 
 ## Tests
 
@@ -70,4 +87,4 @@ python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-Tests cover hue wrapping, noise rejection, ROI bounds, changing detection order, short and long gaps, measured speed, empty detections, and a full video-to-CSV/JSON/annotated-video run. GitHub Actions runs the same suite.
+The tests check colors, noise filtering, crop bounds, IDs after missing frames, speed calculations, and videos with no detections. A full test also reads a generated video and checks the CSV, JSON, time totals, and annotated video. GitHub Actions runs the same tests.
