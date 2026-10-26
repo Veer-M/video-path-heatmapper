@@ -1,0 +1,38 @@
+{
+  "frames": 180,
+  "fps": 30.0,
+  "duration_seconds": 6.0,
+  "detections": 354,
+  "detected_frames": 180,
+  "frame_detection_fraction": 1.0,
+  "tracks": [
+    {
+      "id": 1,
+      "detections": 180,
+      "first_frame": 0,
+      "last_frame": 179,
+      "span_seconds": 5.966666666666667,
+      "observed_seconds": 6.0,
+      "distance_pixels": 311.4323986604106,
+      "mean_speed_pixels_per_second": 52.19537407716379
+    },
+    {
+      "id": 2,
+      "detections": 174,
+      "first_frame": 0,
+      "last_frame": 179,
+      "span_seconds": 5.966666666666667,
+      "observed_seconds": 5.8,
+      "distance_pixels": 301.4817499676993,
+      "mean_speed_pixels_per_second": 50.52766759235183
+    }
+  ],
+  "configuration": {
+    "color": "red",
+    "min_area": 30,
+    "max_area": null,
+    "max_distance": 40,
+    "max_gap": 12,
+    "roi": null
+  }
+}

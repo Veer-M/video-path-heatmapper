@@ -12,3 +12,4 @@ results/
 *.png
 devices.json
 tape_dispense.gcode
+!examples/*.png
